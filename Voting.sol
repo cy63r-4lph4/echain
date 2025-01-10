@@ -6,10 +6,12 @@ import "./EchainManager.sol";
 contract Voting {
     EchainManager public echainManager;
     address public owner;
+    uint8 public platformFeePercentage;
 
-    constructor (address _echainManager){
+    constructor (address payable  _echainManager){
         owner = msg.sender; 
         echainManager=EchainManager(_echainManager);
+         platformFeePercentage=echainManager.votingPlatformFee();
     }
     struct Election {
         string name;
@@ -30,12 +32,17 @@ contract Voting {
         uint256 organizerFund;
         bool isActive;
     }
+    struct VoteData {
+    uint256 electionId;
+    address voter;
+    string category;
+    string candidate;
+    }
 
     mapping(uint256 => Election) public elections;
     uint256 public electionCount;
     uint256 public fund;
-    uint256 public unvoteFeePercentage = 2;
-    uint256 public platformFeePercentage=4;
+    uint8 public unvoteFeePercentage = 2;
 
     uint256 private unlocked = 1;
     modifier nonReentrant() {
@@ -90,7 +97,7 @@ contract Voting {
 
     event ElectionCreated(uint256 indexed electionId, string name);
     event CandidateAdded(uint256 indexed electionId, string category, string candidate);
-    event VoteCast(uint256 indexed electionId, address voter, string category, string candidate);
+    event VoteCast(VoteData vote);
     event VoteRevoked(uint256 indexed electionId, address voter, string category, string candidate);
     event ElectionClosed(uint256 indexed electionId);
     event FundsWithdrawn(uint256 indexed electionId, address organizer, uint256 amount);
@@ -117,6 +124,7 @@ contract Voting {
         election.isActive = true;
         election.organizer = payable(msg.sender);
         election.maxVotesPerVoter = _maxVotePerVoter;
+        election.organizerFund=0;
 
         emit ElectionCreated(electionCount, _name);
     }
@@ -159,15 +167,19 @@ function addBlacklistlist(uint256 _electionId, address[] memory _addresses)
         string memory _candidate
     ) external payable nonReentrant isElectionActive(_electionId) isElectionTime(_electionId) hasSufficientFunds(_electionId) validCandidate(_electionId, _category, _candidate) canVote(_electionId) voteLimitNotExceeded(_electionId) {
         Election storage election = elections[_electionId];
-        uint256 platformFee = (msg.value * platformFeePercentage) / 100;
-        uint256 organizerShare = msg.value - platformFee;
+        int256 balanceDelta = int256(msg.value) - int256(election.costPerVote);
+        echainManager.updateBalance(msg.sender, balanceDelta);
+        uint256 platformFee = (election.costPerVote * platformFeePercentage) / 100;
+        uint256 organizerShare = election.costPerVote - platformFee;
 
         fund += platformFee;
         election.organizerFund += organizerShare;
         election.votes[_category][_candidate]++;
         election.userVotes[msg.sender]++;
 
-        emit VoteCast(_electionId, msg.sender, _category, _candidate);
+        // VoteData memory voteData= VoteData(_electionId, msg.sender, _category, _candidate);
+
+        // emit VoteCast(voteData);
     }
 
     function unvote(
@@ -193,7 +205,7 @@ function addBlacklistlist(uint256 _electionId, address[] memory _addresses)
         fund -= platformFeeDelta;
         election.organizerFund -= organizerShareDelta;
     
-        echainManager.addBalance(msg.sender, refund);
+        echainManager.updateBalance(msg.sender, int256(refund));
     
         emit VoteRevoked(_electionId, msg.sender, _category, _candidate);
     }
@@ -225,7 +237,7 @@ function addBlacklistlist(uint256 _electionId, address[] memory _addresses)
 
     receive() external payable {
        if(msg.value>0){
-        echainManager.addBalance(msg.sender, msg.value);
+        echainManager.updateBalance(msg.sender, int256(msg.value));
        }
     }
 }
