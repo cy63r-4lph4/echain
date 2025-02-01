@@ -1,3 +1,3 @@
-import Navbar from "./Navbar";
 
-export default Navbar from ./Navbar;
+export { default as Navbar } from './Navbar';
+export { default as Footer } from './Footer';

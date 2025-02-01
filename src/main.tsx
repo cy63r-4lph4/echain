@@ -1,11 +1,14 @@
-import { StrictMode } from 'react'
+import { BrowserRouter as Router} from "react-router-dom";
+
 import { createRoot } from 'react-dom/client'
-import './index.css'
-// import App from './App.tsx'
-import LandingPage from './pages/Landing.tsx'
+
+import App from './App.tsx'
+import CustomWagmiProvider from "./providers/WagmiProvider.tsx";
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <LandingPage />
-  </StrictMode>,
+  <Router>
+    <CustomWagmiProvider>
+      <App />
+    </CustomWagmiProvider>
+    </Router>
 )
