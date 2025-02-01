@@ -2,16 +2,24 @@
 pragma solidity ^0.8.0;
 
 contract EchainManager {
-    mapping(address => uint256) public echainBalance;
     address public votingContract;
     address public ticketingContract;
     address public owner;
 
-    event BalanceUpdated(address indexed user, uint256 newBalance);
-    event Withdrawal(address indexed user, uint256 amount);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-    uint8 public votingPlatformFee=4;
-    uint8 public ticketPlatformFee=5;
+    mapping(address => bool) private Organizers;
+
+    uint8 public votingPlatformFee = 4;
+    uint8 public unvotePlatformFee = 2;
+    uint8 public maxCategoriesPerEvent = 5;
+
+    uint8 public ticketingPlatformFee = 5;
+
+    event OrganizerRegistered(address indexed organizer);
+    event OwnershipTransferred(
+        address indexed oldOwner,
+        address indexed newOwner
+    );
+    event ContractsSet(address votingContract, address ticketingContract);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Not authorized: Only owner");
@@ -19,69 +27,72 @@ contract EchainManager {
     }
 
     modifier onlyAuthorized() {
-        require(msg.sender == votingContract || msg.sender == ticketingContract, "Not Authorized");
+        require(
+            msg.sender == votingContract || msg.sender == ticketingContract,
+            "Not Authorized"
+        );
         _;
     }
 
-    constructor() payable {
-        owner = msg.sender; 
+    constructor() {
+        owner = msg.sender;
     }
 
-    function setContracts(address _votingContract, address _ticketingContract) external onlyOwner {
-        require(votingContract == address(0) && ticketingContract == address(0), "Contracts already set");
-        require(isContract(_votingContract) && isContract(_ticketingContract), "Addresses must be contracts");
-        
+    function setContracts(
+        address _votingContract,
+        address _ticketingContract
+    ) external onlyOwner {
+        require(
+            votingContract == address(0) && ticketingContract == address(0),
+            "Contracts already set"
+        );
+        require(
+            isContract(_votingContract) && isContract(_ticketingContract),
+            "Addresses must be contracts"
+        );
+
         votingContract = _votingContract;
         ticketingContract = _ticketingContract;
+
+        emit ContractsSet(_votingContract, _ticketingContract);
     }
 
-    function updateBalance(address user, int256 delta) external onlyAuthorized {
-        if (delta > 0) {
-            echainBalance[user] += uint256(delta);
-        } else {
-            echainBalance[user] -= uint256(-delta);
-        }
-        emit BalanceUpdated(user, echainBalance[user]);
-    }
-    
-    
-
-    function withdrawBalance() external {
-        uint256 balance = echainBalance[msg.sender];
-        require(balance > 0, "No balance to withdraw");
-
-        echainBalance[msg.sender] = 0;
-        payable(msg.sender).transfer(balance);
-
-        emit Withdrawal(msg.sender, balance);
+    function registerOrganizer() external {
+        require(!Organizers[msg.sender], "Already an organizer");
+        Organizers[msg.sender] = true;
+        emit OrganizerRegistered(msg.sender);
     }
 
-    function getBalance(address user) external view returns (uint256) {
-        return echainBalance[user];
+    function isOrganizer(address user) external view returns (bool) {
+        return Organizers[user];
     }
 
-    function withdrawAll() external onlyOwner {
-        uint256 contractBalance = address(this).balance;
-        require(contractBalance > 0, "No balance to withdraw");
-
-        payable(owner).transfer(contractBalance);
-    }
 
     function transferOwnership(address newOwner) external onlyOwner {
         require(newOwner != address(0), "Invalid address");
         emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
     }
+    function updateVotingPlatformFee(uint8 newFee) public{
+        require(newFee<10,"Platform fee must be less than 10%");
+        votingPlatformFee=newFee;
+    }
+    function updateUnvotePlatformFee(uint8 newFee) public{
+        require(newFee<10,"Platform fee must be less than 10%");
+        unvotePlatformFee=newFee;
+    }
+    function updateTicketingPlatformFee(uint8 newFee) public{
+        require(newFee<10,"Platform fee must be less than 10%");
+        ticketingPlatformFee=newFee;
+    }
 
-    fallback() external payable {
+    fallback() external {
         revert("Function does not exist");
     }
-
-    receive() external payable { 
-        echainBalance[msg.sender]=msg.value;
+    receive() external payable{
+        revert();
     }
 
-    
     function isContract(address addr) private view returns (bool) {
         uint256 size;
         assembly {
